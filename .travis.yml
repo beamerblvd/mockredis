@@ -1,12 +1,22 @@
+addons:
+  apt:
+    packages:
+    - lua5.2
+    - liblua5.2-dev
 language: python
 python:
 - '2.7'
 - '3.2'
 - '3.3'
 - '3.4'
+- '3.5'
+- '3.6'
 - pypy
 - pypy3
-install: pip install .
+install:
+- pip install .
+- if [[ "$TRAVIS_PYTHON_VERSION" =~ ^(2.7|3.4)$ ]]; then pip install .[lua]; fi
+# Add 3.2, 3.3, 3.5, and 3.6 when https://github.com/travis-ci/travis-ci/issues/8217 is fixed
 script: python setup.py nosetests
 deploy:
   provider: pypi

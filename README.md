@@ -14,7 +14,8 @@ Use pip:
 ## Usage
 
 Both `mockredis.mock_redis_client` and `mockredis.mock_strict_redis_client` can be
-used to patch instances of the *redis client*.
+used to patch instances of the *redis client*, and `get_mock_redis_client_creator`
+can be used to create a generator for more flexible mocks.
 
 For example, using the [mock][mock] library:
 
@@ -23,6 +24,11 @@ For example, using the [mock][mock] library:
 Or:
 
     @patch('redis.StrictRedis', mock_strict_redis_client)
+
+Or, for more control:
+
+    @patch('redis.Redis', get_mock_redis_client_creator(load_lua_dependencies=False))
+    @patch('redis.StrictRedis', get_mock_redis_client_creator(strict=True, clock=my_frozen_clock))
 
 ## Testing
 

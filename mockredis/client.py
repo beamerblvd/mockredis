@@ -1561,7 +1561,7 @@ def get_total_milliseconds(td):
     return int((td.days * 24 * 60 * 60 + td.seconds) * 1000 + td.microseconds / 1000.0)
 
 
-def mock_redis_client(**kwargs):
+def mock_redis_client(*_, **__):
     """
     Mock common.util.redis_client so we
     can return a MockRedis object
@@ -1572,7 +1572,7 @@ def mock_redis_client(**kwargs):
 mock_redis_client.from_url = mock_redis_client
 
 
-def mock_strict_redis_client(**kwargs):
+def mock_strict_redis_client(*_, **__):
     """
     Mock common.util.redis_client so we
     can return a MockRedis object
@@ -1581,3 +1581,22 @@ def mock_strict_redis_client(**kwargs):
     return MockRedis(strict=True)
 
 mock_strict_redis_client.from_url = mock_strict_redis_client
+
+
+def get_mock_redis_client_creator(**kwargs):
+    """
+    Generate a getter for a MockRedis
+    object that passes the given kwargs
+    to each MockRedis object instantiated
+    by the getter returned. Sample usage:
+
+    @mock.patch('redis.Redis', get_mock_redis_client_creator(load_lua_dependencies=False))
+    @mock.patch('redis.StrictRedis', get_mock_redis_client_creator(strict=True, clock=frozen_clock))
+    """
+
+    def _getter(*_, **__):
+        return MockRedis(**kwargs)
+
+    _getter.from_url = _getter
+
+    return _getter

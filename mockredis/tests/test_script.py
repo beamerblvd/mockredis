@@ -15,13 +15,16 @@ from mockredis.tests.test_constants import (
     LIST1, LIST2,
     SET1,
     VAL1, VAL2, VAL3, VAL4,
+    bVAL1, bVAL2, bVAL3, bVAL4,
     LPOP_SCRIPT
 )
-from mockredis.tests.fixtures import raises_response_error
 
 
 if sys.version_info >= (3, 0):
     long = int
+    string_types = (str, )
+else:
+    string_types = (basestring, )
 
 
 class TestScript(object):
@@ -108,7 +111,7 @@ class TestScript(object):
         script(keys=[LIST1], args=[VAL1, VAL2])
 
         # validate insertion
-        eq_([VAL2, VAL1], self.redis.lrange(LIST1, 0, -1))
+        eq_([bVAL2, bVAL1], self.redis.lrange(LIST1, 0, -1))
 
     def test_register_script_lpop(self):
         self.redis.lpush(LIST1, VAL2, VAL1)
@@ -120,7 +123,7 @@ class TestScript(object):
 
         # validate lpop
         eq_(VAL1, list_item)
-        eq_([VAL2], self.redis.lrange(LIST1, 0, -1))
+        eq_([bVAL2], self.redis.lrange(LIST1, 0, -1))
 
     def test_register_script_rpoplpush(self):
         self.redis.lpush(LIST1, VAL2, VAL1)
@@ -132,8 +135,8 @@ class TestScript(object):
         script(keys=[LIST1, LIST2])
 
         # validate rpoplpush
-        eq_([VAL1], self.redis.lrange(LIST1, 0, -1))
-        eq_([VAL2, VAL3, VAL4], self.redis.lrange(LIST2, 0, -1))
+        eq_([bVAL1], self.redis.lrange(LIST1, 0, -1))
+        eq_([bVAL2, bVAL3, bVAL4], self.redis.lrange(LIST2, 0, -1))
 
     def test_register_script_rpop_lpush(self):
         self.redis.lpush(LIST1, VAL2, VAL1)
@@ -148,8 +151,8 @@ class TestScript(object):
         script(keys=[LIST1, LIST2])
 
         # validate rpop and then lpush
-        eq_([VAL1], self.redis.lrange(LIST1, 0, -1))
-        eq_([VAL2, VAL3, VAL4], self.redis.lrange(LIST2, 0, -1))
+        eq_([bVAL1], self.redis.lrange(LIST1, 0, -1))
+        eq_([bVAL2, bVAL3, bVAL4], self.redis.lrange(LIST2, 0, -1))
 
     def test_register_script_client(self):
         # lpush two values in LIST1 in first instance of redis
@@ -168,8 +171,8 @@ class TestScript(object):
 
         # validate lpop from LIST1 in redis2
         eq_(VAL3, list_item)
-        eq_([VAL4], redis2.lrange(LIST1, 0, -1))
-        eq_([VAL1, VAL2], self.redis.lrange(LIST1, 0, -1))
+        eq_([bVAL4], redis2.lrange(LIST1, 0, -1))
+        eq_([bVAL1, bVAL2], self.redis.lrange(LIST1, 0, -1))
 
     def test_eval_lpush(self):
         # lpush two values
@@ -177,7 +180,7 @@ class TestScript(object):
         self.redis.eval(script_content, 1, LIST1, VAL1, VAL2)
 
         # validate insertion
-        eq_([VAL2, VAL1], self.redis.lrange(LIST1, 0, -1))
+        eq_([bVAL2, bVAL1], self.redis.lrange(LIST1, 0, -1))
 
     def test_eval_lpop(self):
         self.redis.lpush(LIST1, VAL2, VAL1)
@@ -188,7 +191,7 @@ class TestScript(object):
 
         # validate lpop
         eq_(VAL1, list_item)
-        eq_([VAL2], self.redis.lrange(LIST1, 0, -1))
+        eq_([bVAL2], self.redis.lrange(LIST1, 0, -1))
 
     def test_eval_lrem(self):
         self.redis.delete(LIST1)
@@ -318,7 +321,7 @@ class TestScript(object):
     def test_lua_to_python_string(self):
         lval = self.lua.eval('"somestring"')
         pval = MockRedisScript._lua_to_python(lval)
-        ok_(isinstance(pval, str))
+        ok_(isinstance(pval, string_types))
         eq_("somestring", pval)
 
     def test_lua_to_python_bool(self):
@@ -383,11 +386,24 @@ class TestScript(object):
         script = self.redis.register_script(script_content)
         eq_('OK', script())
 
-    @raises_response_error
     def test_lua_err_return(self):
         script_content = "return {err='ERROR Some message'}"
         script = self.redis.register_script(script_content)
-        script()
+        with assert_raises(Exception) as error_context:
+            script()
+        eq_('ERROR Some message', error_context.exception.args[0])
+
+    def test_lua_redis_status_reply(self):
+        script_content = "return redis.status_reply('OK')"
+        script = self.redis.register_script(script_content)
+        eq_('OK', script())
+
+    def test_lua_redis_error_reply(self):
+        script_content = "return redis.error_reply('my error')"
+        script = self.redis.register_script(script_content)
+        with assert_raises(Exception) as error_context:
+            script()
+        eq_('my error', error_context.exception.args[0])
 
     def test_concurrent_lua(self):
         script_content = """

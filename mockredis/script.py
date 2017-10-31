@@ -2,7 +2,25 @@ import sys
 import threading
 from mockredis.exceptions import ResponseError
 
+
 LuaLock = threading.Lock()
+
+if sys.version_info[0] == 3:
+    _string_types = (str, )
+    _integer_types = (int, )
+    _number_types = (int, float)
+    _string_or_binary_types = (str, bytes)
+    _binary_type = bytes
+    _long_type = int
+    _iteritems = lambda d, **kw: iter(d.items(**kw))
+else:
+    _string_types = (basestring, )
+    _integer_types = (int, long)
+    _number_types = (int, long, float)
+    _string_or_binary_types = (basestring, )
+    _binary_type = str
+    _long_type = long
+    _iteritems = lambda d, **kw: d.iteritems(**kw)
 
 
 class Script(object):
@@ -47,7 +65,14 @@ class Script(object):
                 response = client.call(*call_args)
             return self._python_to_lua(response)
 
-        lua_globals.redis = {"call": _call}
+        def _reply_table(field, message):
+            return lua.eval("{{{field}='{message}'}}".format(field=field, message=message))
+
+        lua_globals.redis = {
+            'call': _call,
+            'status_reply': lambda status: _reply_table('ok', status),
+            'error_reply': lambda error: _reply_table('err', error),
+        }
         return self._lua_to_python(lua.execute(self.script), return_status=True)
 
     @staticmethod
@@ -117,9 +142,12 @@ class Script(object):
                         raise ResponseError(lval[i])
                 pval.append(Script._lua_to_python(lval[i]))
             return pval
-        elif isinstance(lval, long):
+        elif lua_globals.type(lval) == "boolean":
+            # Lua boolean --> Python bool
+            return bool(lval)
+        elif isinstance(lval, _integer_types):
             # Lua number --> Python long
-            return long(lval)
+            return _long_type(lval)
         elif isinstance(lval, float):
             # Lua number --> Python float
             return float(lval)
@@ -129,9 +157,6 @@ class Script(object):
         elif lua_globals.type(lval) == "string":
             # Lua string --> Python string
             return lval
-        elif lua_globals.type(lval) == "boolean":
-            # Lua boolean --> Python bool
-            return bool(lval)
         raise RuntimeError("Invalid Lua type: " + str(lua_globals.type(lval)))
 
     @staticmethod
@@ -161,17 +186,17 @@ class Script(object):
             #     in Lua returns: {k1, v1, k2, v2, k3, v3}
             lua_dict = lua.eval("{}")
             lua_table = lua.eval("table")
-            for k, v in pval.iteritems():
+            for k, v in _iteritems(pval):
                 lua_table.insert(lua_dict, Script._python_to_lua(k))
                 lua_table.insert(lua_dict, Script._python_to_lua(v))
             return lua_dict
-        elif isinstance(pval, str):
+        elif isinstance(pval, _string_or_binary_types):
             # Python string --> Lua userdata
             return pval
         elif isinstance(pval, bool):
             # Python bool--> Lua boolean
             return lua.eval(str(pval).lower())
-        elif isinstance(pval, (int, long, float)):
+        elif isinstance(pval, _number_types):
             # Python int --> Lua number
             lua_globals = lua.globals()
             return lua_globals.tonumber(str(pval))
